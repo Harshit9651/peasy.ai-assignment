@@ -4,6 +4,13 @@
       <div class="header">
         <h1>User List</h1>
         <p>Click on a user to view their details</p>
+        <input
+          type="text"
+          v-model="searchQuery"
+          @input="updateLocalStorage"
+          placeholder="Search by name or email..."
+          class="search-input"
+        />
       </div>
 
       <div v-if="loading" class="loading">
@@ -13,10 +20,10 @@
 
       <div v-else class="user-list">
         <div
-          v-for="user in users"
+          v-for="user in filteredUsers"
           :key="user.email"
           class="user-card"
-          @click="viewUserDetails(user.email)"  
+          @click="viewUserDetails(user.email)"
         >
           <div class="user-avatar">
             <img :src="user.details.picture.thumbnail" :alt="user.name" />
@@ -28,40 +35,24 @@
         </div>
       </div>
     </div>
-
-    <!-- New User Notification Popup -->
-    <div v-if="showPopup" class="popup">{{ popupMessage }}</div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { io } from "socket.io-client";
 
 const router = useRouter();
-const users = ref([]);
-const newUsers = ref([]);
-const loading = ref(true);
-const showPopup = ref(false);
-const popupMessage = ref("");
-const socket = io("http://localhost:3000"); // Backend URL
+const users = ref(JSON.parse(localStorage.getItem("users")) || []);
+const searchQuery = ref(localStorage.getItem("searchQuery") || "");
+const loading = ref(!users.value.length);
+const socket = io("http://localhost:3000");
 
 onMounted(() => {
-  socket.on("updateUsers", ({ allUsers, newUsers: receivedNewUsers }) => {
-    console.log("🔄 Updated Users Received", { allUsers, receivedNewUsers });
-
-    if (receivedNewUsers.length > 0) {
-      showPopup.value = true;
-      popupMessage.value = `${receivedNewUsers.length} new user(s) added!`;
-
-      setTimeout(() => {
-        showPopup.value = false;
-      }, 4000);
-    }
-
-    newUsers.value = receivedNewUsers;
-    users.value = [...receivedNewUsers, ...allUsers]; // New users on top
+  socket.on("updateUsers", ({ allUsers }) => {
+    users.value = allUsers;
+    localStorage.setItem("users", JSON.stringify(allUsers)); // Save to local storage
     loading.value = false;
   });
 });
@@ -70,11 +61,22 @@ onUnmounted(() => {
   socket.disconnect();
 });
 
-// ✅ Pass only email as parameter
+const updateLocalStorage = () => {
+  localStorage.setItem("searchQuery", searchQuery.value);
+};
+
+const filteredUsers = computed(() => {
+  return users.value.filter(user =>
+    user.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+    user.email.toLowerCase().includes(searchQuery.value.toLowerCase())
+  );
+});
+
 const viewUserDetails = (email) => {
   router.push({ name: "UserDetail", params: { email } });
 };
 </script>
+
 
 <style lang="scss" scoped>
 $primary-color: #4a6bff;
@@ -86,7 +88,14 @@ $background-color: #f8f9fa;
 $card-bg: #fff;
 $shadow-color: rgba(0, 0, 0, 0.1);
 $transition-time: 0.3s;
-
+.search-input {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 20px;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
 .user-list-container {
   max-width: 800px;
   margin: 0 auto;
@@ -354,4 +363,37 @@ $popup-bg: #28a745;
     transform: translateX(20px);
   }
 }
+.search-input {
+  width: 100%;
+  max-width: 400px;
+  padding: 12px 15px;
+  font-size: 1rem;
+  border: 2px solid #4a6bff;
+  border-radius: 25px;
+  outline: none;
+  transition: all 0.3s ease-in-out;
+  background-color: #f8f9fa;
+  color: #333;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+
+  &::placeholder {
+    color: #999;
+    font-size: 0.95rem;
+  }
+
+  &:focus {
+    border-color: #6c63ff;
+    box-shadow: 0 4px 10px rgba(76, 63, 251, 0.3);
+    background-color: white;
+  }
+}
+
+// Responsive Design
+@media (max-width: 768px) {
+  .search-input {
+    width: 90%;
+    max-width: 100%;
+  }
+}
+
 </style>
